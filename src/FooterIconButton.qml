@@ -54,6 +54,16 @@ Item {
                 context.lineTo(4.5, 9.5);
                 context.lineTo(11.5, 9.5);
                 context.lineTo(11.5, 13.5);
+            } else if (control.iconName === "focus") {
+                context.arc(8, 8, 4.5, 0, 2 * Math.PI);
+                context.moveTo(8, 1);
+                context.lineTo(8, 3.5);
+                context.moveTo(8, 12.5);
+                context.lineTo(8, 15);
+                context.moveTo(1, 8);
+                context.lineTo(3.5, 8);
+                context.moveTo(12.5, 8);
+                context.lineTo(15, 8);
             } else {
                 context.moveTo(2.5, 13);
                 context.lineTo(2.5, 3.5);

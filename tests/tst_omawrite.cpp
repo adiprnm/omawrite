@@ -4,6 +4,8 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickStyle>
+#include <QTextDocument>
+#include <QTextLayout>
 
 #include "backend.h"
 #include "markdownhighlighter.h"
@@ -52,6 +54,54 @@ private slots:
         QCOMPARE(markup.at(0).content.length, 4);
         QCOMPARE(markup.at(2).content.length, 4);
         QCOMPARE(markup.at(2).markers[0].length, 1);
+    }
+
+    void findsFocusSentenceSpan() {
+        const QString text = QStringLiteral("Hello. World! Next one?");
+        QCOMPARE(Backend::sentenceSpan(text, 2), qMakePair(0, 6));
+        QCOMPARE(Backend::sentenceSpan(text, 8), qMakePair(7, 13));
+        QCOMPARE(Backend::sentenceSpan(text, 15), qMakePair(14, 23));
+        // A line without sentence punctuation is focused in full.
+        QCOMPARE(Backend::sentenceSpan(QStringLiteral("# Heading"), 4),
+                 qMakePair(0, 9));
+    }
+
+    void persistsFocusMode() {
+        Backend backend;
+        QSignalSpy focusSpy(&backend, &Backend::focusModeChanged);
+        QVERIFY(!backend.focusMode());
+        backend.setFocusMode(true);
+        QCOMPARE(focusSpy.count(), 1);
+        QVERIFY(backend.focusMode());
+
+        Backend restored;
+        QVERIFY(restored.focusMode());
+        restored.setFocusMode(false);
+    }
+
+    void dimsTextOutsideFocus() {
+        QTextDocument document;
+        document.setPlainText(QStringLiteral("First sentence. Second sentence here."));
+        MarkdownHighlighter highlighter(&document);
+
+        const auto dimRangeCount = [](const QTextBlock &block) {
+            int count = 0;
+            if (QTextLayout *layout = block.layout()) {
+                for (const QTextLayout::FormatRange &range : layout->formats())
+                    if (range.format.foreground().style() != Qt::NoBrush)
+                        ++count;
+            }
+            return count;
+        };
+
+        highlighter.setFocus(true, 0, 15);
+        const QTextBlock block = document.firstBlock();
+        QCOMPARE(dimRangeCount(block), 1);
+        QCOMPARE(block.layout()->formats().first().start, 15);
+
+        // Turning focus off restores full-strength text everywhere.
+        highlighter.setFocus(false, 0, 15);
+        QCOMPARE(dimRangeCount(document.firstBlock()), 0);
     }
 
     void loadsCurrentOmarchyTheme() {
@@ -180,8 +230,16 @@ private slots:
 
         QObject *saveButton = window->findChild<QObject *>(QStringLiteral("saveButton"));
         QObject *openButton = window->findChild<QObject *>(QStringLiteral("openButton"));
+        QObject *focusButton = window->findChild<QObject *>(QStringLiteral("focusButton"));
         QVERIFY(saveButton);
         QVERIFY(openButton);
+        QVERIFY(focusButton);
+
+        QVERIFY(!backend.focusMode());
+        QVERIFY(QMetaObject::invokeMethod(focusButton, "clicked"));
+        QVERIFY(backend.focusMode());
+        // Keep focus mode off so later windows start from the default.
+        backend.setFocusMode(false);
 
         QSignalSpy saveDialogSpy(&backend, &Backend::saveDialogRequested);
         QVERIFY(QMetaObject::invokeMethod(saveButton, "clicked"));

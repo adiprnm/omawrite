@@ -1,14 +1,14 @@
 # Maintainer: David Heinemeier Hansson <david@hey.com>
 
 pkgname=omawrite
-pkgver=0.1.0
-pkgrel=1
+pkgver=0.5.0
+pkgrel=2
 pkgdesc='Dead-simple Markdown writing app built with Qt Quick'
 arch=('x86_64')
 url='https://github.com/omacom-io/omawrite'
-license=('MIT')
+license=('MIT' 'OFL-1.1')
 install='omawrite.install'
-depends=('qt6-base' 'qt6-declarative' 'xdg-desktop-portal')
+depends=('hicolor-icon-theme' 'qt6-base' 'qt6-declarative' 'xdg-desktop-portal')
 makedepends=('gcc' 'make' 'qt6-base' 'qt6-declarative')
 source=()
 sha256sums=()

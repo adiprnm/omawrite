@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QPair>
 #include <QPointer>
 #include <QByteArray>
 #include <QFileSystemWatcher>
@@ -20,6 +21,7 @@ class Backend : public QObject {
     Q_PROPERTY(QUrl fileUrl READ fileUrl NOTIFY fileUrlChanged)
     Q_PROPERTY(QString fileName READ fileName NOTIFY fileUrlChanged)
     Q_PROPERTY(bool modified READ modified NOTIFY modifiedChanged)
+    Q_PROPERTY(bool focusMode READ focusMode WRITE setFocusMode NOTIFY focusModeChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
     Q_PROPERTY(int wordCount READ wordCount NOTIFY wordCountChanged)
     Q_PROPERTY(bool darkMode READ darkMode WRITE setDarkMode NOTIFY darkModeChanged)
@@ -39,6 +41,8 @@ public:
     QString fileName() const;
 
     bool modified() const { return m_modified; }
+    bool focusMode() const { return m_focusMode; }
+    void setFocusMode(bool focusMode);
     QString status() const { return m_status; }
     int wordCount() const { return m_wordCount; }
     bool darkMode() const { return m_darkMode; }
@@ -52,6 +56,9 @@ public:
     static int countWords(const QString &text);
     static QString normalizedLinkUrl(const QString &clipboardText);
     static QString suggestedFileName(const QString &text);
+    // The iA-Writer-style focus span around position within a single block:
+    // the sentence the caret sits in, including its terminating punctuation.
+    static QPair<int, int> sentenceSpan(const QString &text, int position);
 
     Q_INVOKABLE void attachDocument(QObject *textDocument);
     Q_INVOKABLE void openDialog();
@@ -70,6 +77,7 @@ public:
     Q_INVOKABLE QString clipboardText() const;
     Q_INVOKABLE bool editorTextChanged();
     Q_INVOKABLE QVariantList hiddenRangesAt(int position) const;
+    Q_INVOKABLE void updateFocus(int cursorPosition);
     Q_INVOKABLE void setSearchHighlight(const QString &query, int currentMatchStart);
     Q_INVOKABLE void openExternalUrl(const QUrl &url);
     Q_INVOKABLE QVariantMap windowGeometry() const;
@@ -78,6 +86,7 @@ public:
 signals:
     void fileUrlChanged();
     void modifiedChanged();
+    void focusModeChanged();
     void statusChanged();
     void wordCountChanged();
     void darkModeChanged();
@@ -91,6 +100,8 @@ signals:
 
 private:
     void loadDocumentText(const QString &text);
+    void applyFocus();
+    QPair<int, int> focusRange(int position) const;
     void setFileUrl(const QUrl &url);
     void setModified(bool modified);
     void setStatus(const QString &status);
@@ -113,6 +124,8 @@ private:
 
     QUrl m_fileUrl;
     bool m_modified = false;
+    bool m_focusMode = false;
+    int m_lastCursorPosition = 0;
     QString m_status;
     int m_wordCount = 0;
     bool m_darkMode = true;

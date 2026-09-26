@@ -93,6 +93,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     }
     m_wordCountTimer.setSingleShot(true);
     m_wordCountTimer.setInterval(120);
+    m_focusMode = QSettings().value(QStringLiteral("editor/focusMode"), false).toBool();
     connect(&m_wordCountTimer, &QTimer::timeout, this, &Backend::refreshWordCount);
     m_recoveryTimer.setSingleShot(true);
     m_recoveryTimer.setInterval(750);
@@ -166,6 +167,64 @@ void Backend::setTextScale(qreal textScale) {
     emit textScaleChanged();
 }
 
+void Backend::setFocusMode(bool focusMode) {
+    if (m_focusMode == focusMode)
+        return;
+
+    m_focusMode = focusMode;
+    QSettings().setValue(QStringLiteral("editor/focusMode"), m_focusMode);
+    emit focusModeChanged();
+    applyFocus();
+}
+
+void Backend::updateFocus(int cursorPosition) {
+    m_lastCursorPosition = cursorPosition;
+    applyFocus();
+}
+
+void Backend::applyFocus() {
+    if (!m_highlighter)
+        return;
+
+    const QPair<int, int> range = focusRange(m_lastCursorPosition);
+    m_highlighter->setFocus(m_focusMode, range.first, range.second);
+}
+
+QPair<int, int> Backend::focusRange(int position) const {
+    if (!m_document)
+        return {position, position};
+
+    const int limit = qMax(0, m_document->characterCount() - 1);
+    const QTextBlock block = m_document->findBlock(qBound(0, position, limit));
+    if (!block.isValid())
+        return {position, position};
+
+    const QPair<int, int> span = sentenceSpan(block.text(), position - block.position());
+    return {block.position() + span.first, block.position() + span.second};
+}
+
+QPair<int, int> Backend::sentenceSpan(const QString &text, int position) {
+    const auto isBoundary = [](QChar c) {
+        return c == QLatin1Char('.') || c == QLatin1Char('!')
+            || c == QLatin1Char('?') || c == QLatin1Char('\n');
+    };
+
+    const int local = qBound(0, position, text.length());
+    int start = local;
+    while (start > 0 && !isBoundary(text.at(start - 1)))
+        --start;
+    while (start < text.length() && text.at(start).isSpace())
+        ++start;
+
+    int end = local;
+    while (end < text.length() && !isBoundary(text.at(end)))
+        ++end;
+    if (end < text.length())
+        ++end; // Keep the terminating punctuation in focus.
+
+    return {start, qMax(start, end)};
+}
+
 void Backend::attachDocument(QObject *textDocument) {
     auto *quickDocument = qobject_cast<QQuickTextDocument *>(textDocument);
     if (!quickDocument || !quickDocument->textDocument()) {
@@ -181,6 +240,7 @@ void Backend::attachDocument(QObject *textDocument) {
     m_highlighter = new MarkdownHighlighter(m_document);
     m_highlighter->setDarkMode(m_darkMode);
     m_highlighter->setColors(m_themeBackground, m_themeForeground, m_themeAccent);
+    applyFocus();
 
     connect(m_document, &QTextDocument::contentsChange, this,
             [this](int position, int, int charsAdded) {

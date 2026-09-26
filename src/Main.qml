@@ -91,6 +91,12 @@ ApplicationWindow {
             : Window.FullScreen;
     }
 
+    function toggleFocusMode() {
+        backend.focusMode = !backend.focusMode;
+        backend.updateFocus(editor.cursorPosition);
+        editor.forceActiveFocus();
+    }
+
     function updateSearch() {
         var matches = [];
         var query = searchField.text;
@@ -170,6 +176,12 @@ ApplicationWindow {
         sequence: "Ctrl+K"
         context: Qt.WindowShortcut
         onActivated: editor.insertLink()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+F"
+        context: Qt.ApplicationShortcut
+        onActivated: win.toggleFocusMode()
     }
 
     Shortcut {
@@ -331,7 +343,7 @@ ApplicationWindow {
         standardButtons: Dialog.Close
         anchors.centerIn: parent
         contentItem: Label {
-            text: "Ctrl+S  Save\nCtrl+Shift+S  Save As\nCtrl+O  Open\nCtrl+N  New Window\nCtrl+F  Find\nCtrl+H  Find and Replace\nCtrl+B  Bold\nCtrl+I  Italic\nCtrl+K  Link\nCtrl+P  Print\nF11 / Super+F  Fullscreen\nCtrl+?  Shortcuts"
+            text: "Ctrl+S  Save\nCtrl+Shift+S  Save As\nCtrl+O  Open\nCtrl+N  New Window\nCtrl+F  Find\nCtrl+H  Find and Replace\nCtrl+B  Bold\nCtrl+I  Italic\nCtrl+K  Link\nCtrl+P  Print\nCtrl+Shift+F  Focus Mode\nF11 / Super+F  Fullscreen\nCtrl+?  Shortcuts"
             lineHeight: 1.5
         }
     }
@@ -558,6 +570,7 @@ ApplicationWindow {
                     width: 1
                     color: win.strongTextColor
                 }
+                onCursorPositionChanged: backend.updateFocus(cursorPosition)
                 onCursorRectangleChanged: editorFlick.ensureCursorVisible()
 
                 function replaceSelectionWith(replacement) {
@@ -791,6 +804,7 @@ ApplicationWindow {
 
                 Component.onCompleted: {
                     backend.attachDocument(textDocument);
+                    backend.updateFocus(cursorPosition);
                     forceActiveFocus();
                 }
             }
@@ -819,6 +833,14 @@ ApplicationWindow {
                 iconColor: win.mutedColor
                 tooltip: "Open"
                 onClicked: backend.openDialog()
+            }
+
+            FooterIconButton {
+                objectName: "focusButton"
+                iconName: "focus"
+                iconColor: backend.focusMode ? backend.themeAccent : win.mutedColor
+                tooltip: backend.focusMode ? "Focus mode: on" : "Focus mode: off"
+                onClicked: win.toggleFocusMode()
             }
 
             Label {

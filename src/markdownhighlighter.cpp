@@ -3,6 +3,7 @@
 #include <QColor>
 #include <QFont>
 #include <QFontMetricsF>
+#include <QTextBlock>
 #include <QTextDocument>
 
 MarkdownHighlighter::MarkdownHighlighter(QTextDocument *document)
@@ -71,6 +72,16 @@ void MarkdownHighlighter::rebuildFormats() {
     m_hiddenMarkerFormat.setFontLetterSpacingType(QFont::AbsoluteSpacing);
     m_hiddenMarkerFormat.setFontLetterSpacing(-charWidth);
 
+    // Everything outside the writing focus is mixed most of the way back to
+    // the background, so the current sentence stays legible while the rest
+    // recedes into iA-Writer-style grey.
+    const qreal dimKeep = 0.35;
+    m_dimFormat = QTextCharFormat();
+    m_dimFormat.setForeground(QColor::fromRgbF(
+        background.redF() + (text.redF() - background.redF()) * dimKeep,
+        background.greenF() + (text.greenF() - background.greenF()) * dimKeep,
+        background.blueF() + (text.blueF() - background.blueF()) * dimKeep));
+
     m_headingFormat = QTextCharFormat();
     m_headingFormat.setForeground(text);
     m_headingFormat.setFontWeight(QFont::Bold);
@@ -103,6 +114,29 @@ void MarkdownHighlighter::rebuildFormats() {
                                                    : QColor(QStringLiteral("#ffad42")));
 }
 
+void MarkdownHighlighter::setFocus(bool enabled, int start, int end) {
+    const bool wasEnabled = m_focusEnabled;
+    const int oldStart = m_focusStart;
+    const int oldEnd = m_focusEnd;
+    m_focusEnabled = enabled;
+    m_focusStart = start;
+    m_focusEnd = end;
+
+    if (!document())
+        return;
+
+    if (wasEnabled != enabled) {
+        // Adding or removing the dim layer touches every block at once.
+        rehighlight();
+        return;
+    }
+    if (!enabled)
+        return;
+
+    rehighlightRange(oldStart, oldEnd);
+    rehighlightRange(start, end);
+}
+
 void MarkdownHighlighter::highlightBlock(const QString &text) {
     if (!text.isEmpty()) {
         highlightMarkers(text);
@@ -112,6 +146,8 @@ void MarkdownHighlighter::highlightBlock(const QString &text) {
         }
     }
     highlightSearch(text);
+    if (m_focusEnabled)
+        highlightFocus(text);
 }
 
 void MarkdownHighlighter::highlightSearch(const QString &text) {
@@ -174,6 +210,48 @@ void MarkdownHighlighter::highlightMarkers(const QString &text) {
         const QRegularExpressionMatch rule = ruleRe.match(text);
         if (rule.hasMatch())
             setFormat(0, text.length(), m_markerFormat);
+    }
+}
+
+void MarkdownHighlighter::highlightFocus(const QString &text) {
+    if (text.isEmpty())
+        return;
+
+    const int blockStart = currentBlock().position();
+    const int blockEnd = blockStart + text.length();
+
+    if (m_focusStart > blockStart) {
+        const int count = qMin(m_focusStart, blockEnd) - blockStart;
+        if (count > 0)
+            setFormat(0, count, m_dimFormat);
+    }
+    if (m_focusEnd < blockEnd) {
+        const int from = qMax(m_focusEnd, blockStart) - blockStart;
+        if (from < text.length())
+            setFormat(from, text.length() - from, m_dimFormat);
+    }
+
+    // The dim format would repaint hidden inline markers in the dim colour,
+    // so paint them back to the background after dimming.
+    const QList<InlineMarkup> markup = inlineMarkup(text);
+    for (const InlineMarkup &item : markup) {
+        for (const Span &marker : item.markers)
+            setFormat(marker.start, marker.length, m_hiddenMarkerFormat);
+    }
+}
+
+void MarkdownHighlighter::rehighlightRange(int start, int end) {
+    QTextDocument *doc = document();
+    if (!doc)
+        return;
+    if (start > end)
+        qSwap(start, end);
+
+    const int limit = qMax(0, doc->characterCount() - 1);
+    QTextBlock block = doc->findBlock(qBound(0, start, limit));
+    while (block.isValid() && block.position() <= end) {
+        rehighlightBlock(block);
+        block = block.next();
     }
 }
 
